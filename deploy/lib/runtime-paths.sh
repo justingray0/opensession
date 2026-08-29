@@ -14,17 +14,41 @@ resolve_bash() {
 
 resolve_deploy_bun() {
   local candidate="${1:-}"
+  local checkout="${OPENSESSION_DEPLOY_CHECKOUT:-}"
+
   if [ -z "$candidate" ]; then
     candidate="$(command -v bun 2>/dev/null || true)"
   fi
+
   case "$candidate" in
     */opensession-bun|opensession-bun)
-      command -v bun 2>/dev/null || true
-      ;;
-    *)
-      printf '%s\n' "$candidate"
+      candidate=""
       ;;
   esac
+
+  # Release worktrees are fresh git checkouts; mise shims and opensession-bun
+  # resolve packageManager from that tree's untrusted mise.toml. Resolve the
+  # real bun binary from the trusted deploy checkout instead.
+  case "$candidate" in
+    ""|*/mise/shims/*)
+      if [ -n "$checkout" ] && [ -f "$checkout/mise.toml" ]; then
+        local mise_bin
+        mise_bin="$(command -v mise 2>/dev/null || true)"
+        if [ -z "$mise_bin" ] && [ -x "/etc/profiles/per-user/${USER:-root}/bin/mise" ]; then
+          mise_bin="/etc/profiles/per-user/${USER:-root}/bin/mise"
+        fi
+        if [ -n "$mise_bin" ]; then
+          candidate="$("$mise_bin" exec -C "$checkout" -- mise which bun 2>/dev/null || true)"
+        fi
+      fi
+      ;;
+  esac
+
+  if [ -z "$candidate" ]; then
+    candidate="$(command -v bun 2>/dev/null || true)"
+  fi
+
+  printf '%s\n' "$candidate"
 }
 
 run_bun_in() {

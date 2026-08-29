@@ -598,7 +598,10 @@ do_deploy() {
     done
   fi
   git_repo fetch --prune origin
-  failed_target="$(sed -n 's/.*"ok":false.*"target":"\([^"]*\)".*/\1/p' "$RESULT_FILE" 2>/dev/null | tail -n 1)"
+  failed_target=""
+  if [ -f "$RESULT_FILE" ]; then
+    failed_target="$(sed -n 's/.*"ok":false.*"target":"\([^"]*\)".*/\1/p' "$RESULT_FILE" | tail -n 1 || true)"
+  fi
   for request in "$REQUESTS_DIR"/*; do
     [ -f "$request" ] || continue
     candidate="${request##*/}"
