@@ -434,7 +434,27 @@ async function main(): Promise<number> {
         );
         info(
           dim(
-            "  --no-upstream   fork checkouts only: pull origin, skip merging upstream",
+            "  Pull git updates, bun install, then health-gated self-deploy (source installs).",
+          ),
+        );
+        info(
+          dim(
+            "  --check         preview commits; do not merge, install, or deploy",
+          ),
+        );
+        info(
+          dim(
+            "  --no-restart    update git + deps only; skip deploy/restart",
+          ),
+        );
+        info(
+          dim(
+            "  --no-upstream   fork checkouts: pull origin only, skip merging tellahq",
+          ),
+        );
+        info(
+          dim(
+            "  --channel <ref> remote branch/ref to track (default: current branch)",
           ),
         );
         return 0;

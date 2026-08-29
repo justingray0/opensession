@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifyTopology, parseRemotes, parseSha256Checksum } from "./update";
+import { classifyTopology, parseRemotes, parseSha256Checksum, resolveUpdateTopology } from "./update";
 
 const UPSTREAM_HTTPS = "https://github.com/tellahq/opensession.git";
 const UPSTREAM_SSH = "git@github.com:tellahq/opensession.git";
@@ -91,5 +91,22 @@ describe("classifyTopology", () => {
 
   test("no remotes at all → conservative default", () => {
     expect(classifyTopology([])).toEqual({ source: "origin", kind: "origin" });
+  });
+});
+
+describe("resolveUpdateTopology", () => {
+  test("--no-upstream on a fork pulls from origin only", () => {
+    const remotes = [
+      { name: "origin", url: FORK },
+      { name: "upstream", url: UPSTREAM_HTTPS },
+    ];
+    expect(resolveUpdateTopology(remotes, {})).toEqual({
+      source: "upstream",
+      kind: "fork",
+    });
+    expect(resolveUpdateTopology(remotes, { noUpstream: true })).toEqual({
+      source: "origin",
+      kind: "origin",
+    });
   });
 });

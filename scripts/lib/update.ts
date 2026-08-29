@@ -65,6 +65,38 @@ export type UpdateOptions = {
   noUpstream?: boolean;
 };
 
+/** Writable deploy state (release pointer, self-deploy log). */
+export function deployStateDir(): string {
+  return process.env.OPENSESSION_DEPLOY_STATE || join(OPENSESSION_HOME, "deploy");
+}
+
+/** Git object source for release-checkout / self-deploy. */
+export function deployCheckoutDir(): string {
+  return process.env.OPENSESSION_DEPLOY_CHECKOUT || REPO_ROOT;
+}
+
+/** Env passed through to deploy/self-deploy.sh on source installs. */
+export function deployEnv(): Record<string, string> {
+  const env: Record<string, string> = {
+    OPENSESSION_DEPLOY_CHECKOUT: deployCheckoutDir(),
+    OPENSESSION_DEPLOY_STATE: deployStateDir(),
+  };
+  const bun = process.env.OPENSESSION_BUN_BIN || Bun.which("bun");
+  if (bun) env.OPENSESSION_BUN_BIN = bun;
+  return env;
+}
+
+export function resolveUpdateTopology(
+  remotes: Remote[],
+  opts: UpdateOptions,
+): Topology {
+  let topology = classifyTopology(remotes);
+  if (opts.noUpstream && topology.kind === "fork") {
+    topology = { source: "origin", kind: "origin" };
+  }
+  return topology;
+}
+
 /** Where published releases are downloaded from (mirrors install.sh). */
 const RELEASE_BASE =
   process.env.OPENSESSION_RELEASE_BASE ||
@@ -364,9 +396,8 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   }
 
   const remotes = parseRemotes((await git(["remote", "-v"])).stdout ?? "");
-  let topology = classifyTopology(remotes);
-  if (opts.noUpstream && topology.kind === "fork") {
-    topology = { source: "origin", kind: "origin" };
+  let topology = resolveUpdateTopology(remotes, opts);
+  if (opts.noUpstream && classifyTopology(remotes).kind === "fork") {
     info(dim("skipping upstream merge (--no-upstream); updating from origin only"));
   }
   if (topology.kind === "fork") {
@@ -488,7 +519,8 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   }
 
   heading("Dependencies");
-  if ((await runInherit(["bun", "install"], REPO_ROOT)) !== 0) {
+  const bun = process.env.OPENSESSION_BUN_BIN || Bun.which("bun") || "bun";
+  if ((await runInherit([bun, "install"], REPO_ROOT, deployEnv())) !== 0) {
     fail("bun install failed");
     return 1;
   }
@@ -605,6 +637,8 @@ async function restartAfterUpdate(
   if (opts.restart === false) return 0;
   const selfDeploy = join(REPO_ROOT, "deploy", "self-deploy.sh");
   const targetSha = deploySha?.trim() || "HEAD";
+  const stateDir = deployStateDir();
+  const bash = Bun.which("bash") || "/bin/bash";
   if (
     pin &&
     (await service.isInstalled()) &&
@@ -613,15 +647,16 @@ async function restartAfterUpdate(
   ) {
     heading("Deploy (health-gated)");
     const code = await runInherit(
-      [selfDeploy, "--sha", targetSha, "--pin", pin],
+      [bash, selfDeploy, "--sha", targetSha, "--pin", pin],
       REPO_ROOT,
+      deployEnv(),
     );
     if (code === 0) {
       ok("restarted and healthy", `rollback pin ${pin.slice(0, 8)}`);
     } else {
       fail(
         "deploy did not come back healthy",
-        "see ~/.opensession-deploy/last-result.json and self-deploy.log",
+        `see ${stateDir}/last-result.json and ${stateDir}/self-deploy.log`,
       );
       return 1;
     }
