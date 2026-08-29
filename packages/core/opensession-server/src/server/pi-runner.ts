@@ -1380,11 +1380,19 @@ export function makePiBashTool(input: {
       // setsid makes bash a process-group leader, so kill(-pid) reaches the
       // grandchildren a plain proc.kill() misses (bash may already be gone
       // when the timeout fires). Absent setsid (macOS), degrade to the
-      // direct-child kill.
-      const setsidPath = Bun.which("setsid");
+      // direct-child kill. Resolve bash/setsid from the session PATH — NixOS
+      // and other minimal images often have no /bin/bash even when bash is on PATH.
+      const whichOpts = input.env.PATH ? { PATH: input.env.PATH } : undefined;
+      const bashPath = Bun.which("bash", whichOpts);
+      if (!bashPath) {
+        throw new Error(
+          `bash not found on PATH${input.env.PATH ? `: ${input.env.PATH}` : ""}`,
+        );
+      }
+      const setsidPath = Bun.which("setsid", whichOpts);
       const directCommand = setsidPath
-        ? [setsidPath, "/bin/bash", "-c", command]
-        : ["/bin/bash", "-c", command];
+        ? [setsidPath, bashPath, "-c", command]
+        : [bashPath, "-c", command];
       const scoped = controlPlaneWorkloadCommand(
         directCommand,
         `opensession-agent-cmd-${crypto.randomUUID().slice(0, 13)}`,
