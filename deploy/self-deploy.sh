@@ -29,6 +29,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/runtime-paths.sh
+. "$SCRIPT_DIR/lib/runtime-paths.sh"
+BASH_BIN="$(resolve_bash)"
+[ -n "$BASH_BIN" ] || {
+  echo "Open Session deploy requires bash on PATH" >&2
+  exit 1
+}
 REPO_DIR="${OPENSESSION_DEPLOY_CHECKOUT:-$(dirname "$SCRIPT_DIR")}"
 RELEASE_TEMPLATE_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -61,7 +68,7 @@ SESSION_KERNEL_SERVICE_NAME="opensession-session-kernel.service"
 SESSION_KERNEL_READY_URL="http://127.0.0.1:3849/ready"
 EXECUTOR_READY_FILE="/run/opensession-executor/ready"
 RUN_HOST_HELPER_VERSION=2
-BUN_BIN="${OPENSESSION_BUN_BIN:-$(command -v bun || true)}"
+BUN_BIN="$(resolve_deploy_bun "${OPENSESSION_BUN_BIN:-}")"
 [ -n "$BUN_BIN" ] && [ -x "$BUN_BIN" ] || {
   echo "Open Session deploy requires Bun" >&2
   exit 1
@@ -184,7 +191,7 @@ release_cmd() {
     OPENSESSION_DEPLOY_CHECKOUT="$REPO_DIR" \
     OPENSESSION_DEPLOY_STATE="$STATE_DIR" \
     OPENSESSION_BUN_BIN="$BUN_BIN" \
-    /bin/bash "$RELEASE_TOOL" "$@"
+    "$BASH_BIN" "$RELEASE_TOOL" "$@"
 }
 
 # Once this script stops the gateway, every exit path owns bringing it back.

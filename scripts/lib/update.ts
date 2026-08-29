@@ -61,6 +61,8 @@ export type UpdateOptions = {
   channel?: string;
   restart?: boolean;
   check?: boolean;
+  /** Fork topology only: update from origin, do not merge upstream. */
+  noUpstream?: boolean;
 };
 
 /** Where published releases are downloaded from (mirrors install.sh). */
@@ -362,7 +364,11 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   }
 
   const remotes = parseRemotes((await git(["remote", "-v"])).stdout ?? "");
-  const topology = classifyTopology(remotes);
+  let topology = classifyTopology(remotes);
+  if (opts.noUpstream && topology.kind === "fork") {
+    topology = { source: "origin", kind: "origin" };
+    info(dim("skipping upstream merge (--no-upstream); updating from origin only"));
+  }
   if (topology.kind === "fork") {
     info(
       dim(
@@ -466,6 +472,7 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   }
   const after = (await git(["rev-parse", "--short", "HEAD"])).stdout;
   ok("updated", `${before} -> ${after}`);
+  const deploySha = ((await git(["rev-parse", "HEAD"])).stdout ?? "").trim();
 
   // Keep the fork current so session pushes and deploy_self (which
   // fast-forwards from origin) see the merged history.
@@ -487,7 +494,7 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   }
   ok("dependencies installed");
 
-  return await restartAfterUpdate(opts, beforeFull);
+  return await restartAfterUpdate(opts, beforeFull, deploySha);
 }
 
 /** The local origin the service should answer on, for the health gate. */
@@ -593,9 +600,11 @@ async function restartReleaseWithRollback(
 async function restartAfterUpdate(
   opts: UpdateOptions,
   pin: string | undefined,
+  deploySha?: string,
 ): Promise<number> {
   if (opts.restart === false) return 0;
   const selfDeploy = join(REPO_ROOT, "deploy", "self-deploy.sh");
+  const targetSha = deploySha?.trim() || "HEAD";
   if (
     pin &&
     (await service.isInstalled()) &&
@@ -604,7 +613,7 @@ async function restartAfterUpdate(
   ) {
     heading("Deploy (health-gated)");
     const code = await runInherit(
-      [selfDeploy, "--sha", "HEAD", "--pin", pin],
+      [selfDeploy, "--sha", targetSha, "--pin", pin],
       REPO_ROOT,
     );
     if (code === 0) {

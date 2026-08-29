@@ -428,9 +428,21 @@ async function main(): Promise<number> {
       return 1;
 
     case "update":
+      if (flags.has("--help") || flags.has("-h")) {
+        info(
+          "usage: opensession update [--check] [--no-restart] [--no-upstream] [--channel <branch>]",
+        );
+        info(
+          dim(
+            "  --no-upstream   fork checkouts only: pull origin, skip merging upstream",
+          ),
+        );
+        return 0;
+      }
       return await update({
         channel: flagValue("--channel"),
         check: flags.has("--check"),
+        noUpstream: flags.has("--no-upstream"),
         restart: !flags.has("--no-restart"),
       });
 

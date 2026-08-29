@@ -13,6 +13,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/runtime-paths.sh
+. "$SCRIPT_DIR/lib/runtime-paths.sh"
+BASH_BIN="$(resolve_bash)"
+[ -n "$BASH_BIN" ] || {
+  echo "Open Session deploy requires bash on PATH" >&2
+  exit 1
+}
 SOURCE_DIR="${OPENSESSION_DEPLOY_CHECKOUT:-${OPENSESSION_REPO_DIR:-$(dirname "$SCRIPT_DIR")}}"
 HEALTH_URL="${OPENSESSION_HEALTH_URL:-http://127.0.0.1:3850/ready}"
 DRAIN_URL="${OPENSESSION_DRAIN_URL:-http://127.0.0.1:3850/api/health}"
@@ -33,7 +40,7 @@ case "$SERVICE_HOME_DIR" in
 esac
 
 run_as_service_user() { runuser -u "$SERVICE_USER" -- "$@"; }
-SERVICE_BUN="${OPENSESSION_BUN_BIN:-$(sed -n 's/^ExecStart=\([^ ]*\) run .*/\1/p' "$SOURCE_DIR/opensession-executor.service" | head -n 1)}"
+SERVICE_BUN="$(resolve_deploy_bun "${OPENSESSION_BUN_BIN:-$(sed -n 's/^ExecStart=\([^ ]*\) run .*/\1/p' "$SOURCE_DIR/opensession-executor.service" | head -n 1)}")"
 [ -n "$SERVICE_BUN" ] && [ -x "$SERVICE_BUN" ] || {
   echo "[deploy] ERROR: Bun is not available for service user $SERVICE_USER" >&2
   exit 1
@@ -74,7 +81,7 @@ run_release() {
     OPENSESSION_DEPLOY_CHECKOUT="$SOURCE_DIR" \
     OPENSESSION_DEPLOY_STATE="$DEPLOY_STATE" \
     OPENSESSION_BUN_BIN="$SERVICE_BUN" \
-    /bin/bash "$RELEASE_TOOL" "$@"
+    "$BASH_BIN" "$RELEASE_TOOL" "$@"
 }
 
 executor_ready() {

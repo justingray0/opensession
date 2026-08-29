@@ -7,9 +7,13 @@
 # may exist in a release; tracked files must continue to match its pinned commit.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/runtime-paths.sh
+. "$SCRIPT_DIR/lib/runtime-paths.sh"
+
 SOURCE_DIR="${OPENSESSION_DEPLOY_CHECKOUT:?OPENSESSION_DEPLOY_CHECKOUT is required}"
 STATE_DIR="${OPENSESSION_DEPLOY_STATE:?OPENSESSION_DEPLOY_STATE is required}"
-BUN_BIN="${OPENSESSION_BUN_BIN:-$(command -v bun || true)}"
+BUN_BIN="$(resolve_deploy_bun "${OPENSESSION_BUN_BIN:-}")"
 RELEASES_DIR="$STATE_DIR/releases"
 CURRENT_LINK="$STATE_DIR/current"
 
@@ -63,7 +67,7 @@ prepare_release() {
     return 1
   }
   log "installing locked dependencies for ${sha:0:10}"
-  (cd "$path" && "$BUN_BIN" install --frozen-lockfile) >&2
+  run_bun_in "$path" install --frozen-lockfile >&2
 
   # Refuse to bless a worktree whose tracked source changed during preparation.
   # Generated/untracked frontend output and node_modules are intentionally okay.
@@ -91,9 +95,8 @@ prepare_frontend() {
   path="$(prepare_release "$1")"
   log "building frontend before cut-over for $(basename "$path" | cut -c1-10)"
   (
-    cd "$path"
-    "$BUN_BIN" run scripts/build-frontend.ts
-    "$BUN_BIN" run scripts/validate-frontend-build.ts
+    run_bun_in "$path" run scripts/build-frontend.ts
+    run_bun_in "$path" run scripts/validate-frontend-build.ts
   ) >&2
   printf '%s\n' "$path"
 }
